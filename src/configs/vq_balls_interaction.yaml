@@ -1,7 +1,7 @@
 seed: 0
 run_num: 0
 model: 'GSWM'
-resume: true
+resume: false
 resume_ckpt: ''
 parallel: false
 device_ids: [2, 1]
