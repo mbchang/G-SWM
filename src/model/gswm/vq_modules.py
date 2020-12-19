@@ -70,25 +70,29 @@ class VAE(nn.Module):
 class VQEmbedding(nn.Module):
     def __init__(self, K, D):
         super().__init__()
+        self.K = K
+        self.D = D
+
         self.embedding = nn.Embedding(K, D)
         self.embedding.weight.data.uniform_(-1./K, 1./K)
 
     def forward(self, z_e_x):
-        z_e_x_ = z_e_x.permute(0, 2, 3, 1).contiguous()
         latents = vq(z_e_x_, self.embedding.weight)
         return latents
 
-    def straight_through(self, z_e_x):
-        z_e_x_ = z_e_x.permute(0, 2, 3, 1).contiguous()  # (B, h, w, D)
-        z_q_x_, indices = vq_st(z_e_x_, self.embedding.weight.detach())  # (B, h, w, D), (B*h*w)
-        z_q_x = z_q_x_.permute(0, 3, 1, 2).contiguous()  # (B, D, h, w)
-
-        z_q_x_bar_flatten = torch.index_select(self.embedding.weight,
+    def straight_through(self, z_e_x_):
+        """ z_e_x_: (B*h*w, D) """
+        z_q_x, indices = vq_st(z_e_x_, self.embedding.weight.detach())  # (B*h*w, D), (B*h*w)
+        z_q_x_bar = torch.index_select(self.embedding.weight,
             dim=0, index=indices)  # (B*h*w, D)
-        z_q_x_bar_ = z_q_x_bar_flatten.view_as(z_e_x_)  # (B, h, w, D)
-        z_q_x_bar = z_q_x_bar_.permute(0, 3, 1, 2).contiguous()  # (B, D, h, w)
+        return z_q_x, z_q_x_bar  # (B*h*w, D), (B*h*w, D)
 
-        return z_q_x, z_q_x_bar
+    def get_loss(self, z_q_x, z_e_x, beta, **kwargs):
+        # Vector quantization objective
+        loss_vq = F.mse_loss(z_q_x, z_e_x.detach(), **kwargs)
+        # Commitment objective
+        loss_commit = F.mse_loss(z_e_x, z_q_x.detach(), **kwargs)
+        return loss_vq + beta * loss_commit
 
 
 class ResBlock(nn.Module):
@@ -144,10 +148,24 @@ class VectorQuantizedVAE(nn.Module):
         x_tilde = self.decoder(z_q_x)
         return x_tilde
 
+    def encode_reshape(self, z_e_x):
+        """ z_e_x (B, D, h, w) """
+        z_e_x = z_e_x.permute(0, 2, 3, 1).contiguous()  # (B, h, w, D)
+        z_e_x = z_e_x.reshape(-1, self.codebook.D)  # (B*h*w, D)
+        return z_e_x
+
+    def decode_reshape(self, z_q_x_st, shape):
+        z_q_x_st = z_q_x_st.reshape(shape)
+        z_q_x_st = z_q_x_st.permute((0, 3, 1, 2)).contiguous()
+        return z_q_x_st
+
     def forward(self, x):
-        z_e_x = self.encoder(x)  # (B, D, h, w)
+        z_e_x_ = self.encoder(x)  # (B, D, h, w)
+        B, D, h, w = z_e_x_.shape
+        z_e_x = self.encode_reshape(z_e_x_)  # (B*h*w, D)
         z_q_x_st, z_q_x = self.codebook.straight_through(z_e_x)  #(B, D, h, w) both
-        x_tilde = self.decoder(z_q_x_st)
+        z_q_x_st = self.decode_reshape(z_q_x_st, (B, h, w, D))  # (B, D, h, w)
+        x_tilde = self.decoder(z_q_x_st)  # (B, C, H, W)
         return x_tilde, z_e_x, z_q_x
 
 
