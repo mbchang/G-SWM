@@ -11,6 +11,9 @@ from .bg import BgModule
 from .fg import FgModule
 from .fg_deter import FgModuleDeter
 
+## VQ
+from .vqbg import VQBgModule
+
 
 class GSWM(nn.Module):
     def __init__(self):
@@ -21,7 +24,10 @@ class GSWM(nn.Module):
             self.fg_module = FgModuleDeter()
         else:
             self.fg_module = FgModule()
-        self.bg_module = BgModule()
+        ###### VQ
+        self.bg_module = VQBgModule()
+        # self.bg_module = BgModule()
+        ###### VQ
         self.sigma = ARCH.SIGMA_START_VALUE if ARCH.SIGMA_ANNEAL else ARCH.SIGMA
     
     def anneal(self, global_step):
