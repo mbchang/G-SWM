@@ -74,8 +74,8 @@ class VQBgModule(nn.Module):
         self.c_init_post = nn.Parameter(torch.randn(1, ARCH.RNN_CTX_HIDDEN_DIM))
         self.h_init_prior = nn.Parameter(torch.randn(1, ARCH.RNN_CTX_HIDDEN_DIM))
         self.c_init_prior = nn.Parameter(torch.randn(1, ARCH.RNN_CTX_HIDDEN_DIM))
-        self.prior_net = MLP([ARCH.RNN_CTX_HIDDEN_DIM, 128, 128, ARCH.Z_CTX_DIM * 2], act=nn.CELU())
         ###### VQ
+        self.prior_net = MLP([ARCH.RNN_CTX_HIDDEN_DIM, 128, 128, ARCH.Z_CTX_DIM], act=nn.CELU())
         self.post_net = MLP([ARCH.RNN_CTX_HIDDEN_DIM + ARCH.IMG_ENC_DIM, 128, 128, ARCH.Z_CTX_DIM], act=nn.CELU())
         ###### VQ
 
@@ -105,8 +105,8 @@ class VQBgModule(nn.Module):
         enc = self.enc(seq.reshape(B * T, 3, H, W))  # (B*T, C, h, w) --> VQ here
         # # I deliberately do this ugly thing because for future version we may need enc to do bg interaction
 
-        enc = enc.flatten(start_dim=1)  # (B*T, C*h*w)
-        enc = self.enc_fc(enc)  # (B*T, 128)
+        enc = enc.flatten(start_dim=1)  # (B*T, D)
+        enc = self.enc_fc(enc)  # (B*T, D)
         enc = enc.view(B, T, ARCH.IMG_ENC_DIM)  # (B, T, 128)
         
         h_post = self.h_init_post.expand(B, ARCH.RNN_CTX_HIDDEN_DIM)
@@ -130,7 +130,8 @@ class VQBgModule(nn.Module):
             h_prior, c_prior = self.rnn_prior(z_ctx_q_x_st, (h_prior, c_prior))  # (B*h*w, D)
             
             loss_vq = self.codebook.get_loss(
-                z_ctx_q_x, params, self.vq_beta, reduction='none').mean(-1)
+                z_ctx_q_x, params, self.vq_beta, reduction='none').mean(-1)  
+                # NOTE: there should not be a negative sign here becasue we want to minimize the MSE in the same way as we want to minimize the KL
 
             z_ctx_list.append(z_ctx_q_x_st)
             kl_list.append(loss_vq)  # probably sum somewhere
@@ -151,7 +152,7 @@ class VQBgModule(nn.Module):
         # (B, T)
         kl_bg = torch.stack(kl_list, dim=1)  # (B, T)
         assert kl_bg.size() == (B, T)
-        print(kl_bg.mean())
+        # print(kl_bg.mean())
         
         things = dict(
             bg=bg,  # (B, T, 3, H, W)
@@ -289,7 +290,7 @@ class VQBgModule(nn.Module):
                 # # (B*T, D)
                 # z_ctx = z_ctx_post.sample()  # VQ
                 # *************
-                z_ctx_q_x_st, z_ctx_q_x = self.codebook.straight_through(params)  #(B, D, h, w) both 
+                z_ctx_q_x_st, z_ctx_q_x = self.codebook.straight_through(params)  #(B, D, h, w) both
                 ###### VQ
                 
                 ###### VQ
@@ -303,13 +304,13 @@ class VQBgModule(nn.Module):
                 ###### VQ
             else:
                 # Compute prior
-                # params = self.prior_net(h_prior)  # VQ
+                params = self.prior_net(h_prior)  # VQ
                 ###### VQ
                 # loc, scale = torch.chunk(params, 2, dim=-1)  # VQ
                 # scale = F.softplus(scale) + 1e-4  # VQ
                 # z_ctx_prior = Normal(loc, scale)  # VQ
                 # z_ctx = z_ctx_prior.sample() if sample else loc  # VQ
-                h_prior, c_prior = self.rnn_prior(z_ctx, (h_prior, c_prior))
+                # h_prior, c_prior = self.rnn_prior(z_ctx, (h_prior, c_prior))
                 # *************
                 z_ctx_q_x_st, z_ctx_q_x = self.codebook.straight_through(params)  #(B, D, h, w) both 
                 h_prior, c_prior = self.rnn_prior(z_ctx_q_x_st, (h_prior, c_prior))
