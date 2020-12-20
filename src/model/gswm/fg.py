@@ -407,11 +407,11 @@ class FgModule(nn.Module):
         kl_what = kl_divergence(z_what_post, z_what_prior)
         kl_what = kl_what * z_pres
         
-        # what prior (B, G*G, D)
+        # depth prior (B, G*G, D)
         kl_depth = kl_divergence(z_depth_post, z_depth_prior)
         kl_depth = kl_depth * z_pres
         
-        # latent prior (B, G*G, D)
+        # dyna prior (B, G*G, D)
         kl_dyna = kl_divergence(z_dyna_post, z_dyna_prior)
         kl_dyna = kl_dyna
         

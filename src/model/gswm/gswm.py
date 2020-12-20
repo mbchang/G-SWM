@@ -13,6 +13,7 @@ from .fg_deter import FgModuleDeter
 
 ## VQ
 from .vqbg import VQBgModule
+from .vqfg import VQFgModule
 
 
 class GSWM(nn.Module):
@@ -23,7 +24,8 @@ class GSWM(nn.Module):
         if ARCH.DETER:
             self.fg_module = FgModuleDeter()
         else:
-            self.fg_module = FgModule()
+            # self.fg_module = FgModule()
+            self.fg_module = VQFgModule()
         ###### VQ
         self.bg_module = VQBgModule()
         # self.bg_module = BgModule()
