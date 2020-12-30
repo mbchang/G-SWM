@@ -57,6 +57,7 @@ def train(cfg):
     print('Initializing model...')
     model = get_model(cfg)
     model = model.to(cfg.device)
+    print(model)
     print('Model initialized.')
     model.train()
     
