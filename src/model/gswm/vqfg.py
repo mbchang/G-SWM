@@ -55,8 +55,8 @@ class VQFgModule(nn.Module):
         self.bg_attention_encoder = BgAttentionEncoder()
 
         ###### VQ
-        self.what_codebook = VQEmbedding(K=512, D=ARCH.Z_WHAT_DIM)
-        self.what_offset_codebook = VQEmbedding(K=512, D=ARCH.Z_WHAT_DIM)
+        self.what_codebook = VQEmbedding(K=ARCH.FG_VQK, D=ARCH.Z_WHAT_DIM)
+        self.what_offset_codebook = VQEmbedding(K=ARCH.FG_VQK, D=ARCH.Z_WHAT_DIM)
         ###### VQ
         
         # For compute propagation map for discovery conditioning
@@ -454,7 +454,7 @@ class VQFgModule(nn.Module):
         # Sum over non-batch dimensions
         kl_pres = kl_pres.flatten(start_dim=1).sum(1)
         kl_where = kl_where.flatten(start_dim=1).sum(1)
-        kl_what = kl_what.flatten(start_dim=1).sum(1)
+        kl_what = kl_what.flatten(start_dim=1).sum(1)  # DEBUGKL
         kl_depth = kl_depth.flatten(start_dim=1).sum(1)
         kl_dyna = kl_dyna.flatten(start_dim=1).sum(1)
         # kl_dyna = torch.zeros_like(kl_dyna)
@@ -482,6 +482,7 @@ class VQFgModule(nn.Module):
         """
         h_prev, c_prev = state_prev
         z_pres_prev, z_depth_prev, z_where_prev, z_what_prev, z_dyna_prev = z_prev
+        B, N, _ = z_pres_prev.size()  # N is number of objects
         
         # (B, N, D)
         
@@ -491,9 +492,19 @@ class VQFgModule(nn.Module):
         
         # TODO: z_pres_prior is not learned
         # All (B, N, D)
-        (z_pres_prob, z_depth_offset_loc, z_depth_offset_scale, z_where_offset_loc, z_where_offset_scale,
-         z_what_offset_loc,
-         z_what_offset_scale, z_depth_gate, z_where_gate, z_what_gate) = self.pres_depth_where_what_prior(z_dyna)
+        # (z_pres_prob, z_depth_offset_loc, z_depth_offset_scale, z_where_offset_loc, z_where_offset_scale,
+        #  z_what_offset_loc,
+        #  z_what_offset_scale, z_depth_gate, z_where_gate, z_what_gate) = self.pres_depth_where_what_prior(z_dyna)
+
+        # (B, N, D)
+        # VQ
+        # (z_pres_prob, z_depth_offset_loc, z_depth_offset_scale, z_where_offset_loc,
+        #  z_where_offset_scale, z_what_offset_loc, z_what_offset_scale,
+        #  z_depth_gate, z_where_gate, z_what_gate) = self.pres_depth_where_what_prior(z_dyna)
+        (z_pres_prob, z_depth_offset_loc, z_depth_offset_scale, z_where_offset_loc,
+         z_where_offset_scale, z_what_offset_param,
+         z_depth_gate, z_where_gate, z_what_gate) = self.pres_depth_where_what_prior(z_dyna)
+        # VQ
         
         # Always set them to one during generation
         z_pres_prior = RelaxedBernoulli(temperature=self.tau, probs=z_pres_prob)
@@ -515,9 +526,20 @@ class VQFgModule(nn.Module):
         z_depth_prior = Normal(z_depth_offset_loc, z_depth_offset_scale)
         z_depth_offset = z_depth_prior.rsample() if sample else z_depth_offset_loc
         z_depth = z_depth_prev + ARCH.Z_DEPTH_UPDATE_SCALE * z_depth_gate * z_depth_offset
-        
-        z_what_prior = Normal(z_what_offset_loc, z_what_offset_scale)
-        z_what_offset = z_what_prior.rsample() if sample else z_what_offset_loc
+
+        # VQ
+        # z_what_prior = Normal(z_what_offset_loc, z_what_offset_scale)
+        # z_what_offset = z_what_prior.rsample() if sample else z_what_offset_loc
+        # ***
+        # z_what_offset_param (B, N, D)
+        assert sample == False
+        z_what_offset_q_x_st, z_what_offset_q_x = self.what_offset_codebook.straight_through(
+            z_what_offset_param.reshape(B*N, ARCH.Z_WHAT_DIM))
+        z_what_offset_q_x_st = z_what_offset_q_x_st.reshape(B, N, ARCH.Z_WHAT_DIM)
+        z_what_offset_q_x = z_what_offset_q_x.reshape(B, N, ARCH.Z_WHAT_DIM)
+        z_what_offset = z_what_offset_q_x_st
+        # VQ
+
         z_what = z_what_prev + ARCH.Z_WHAT_UPDATE_SCALE * z_what_gate * torch.tanh(z_what_offset)
         
         z = (z_pres, z_depth, z_where, z_what, z_dyna)
