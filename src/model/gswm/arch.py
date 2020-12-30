@@ -127,3 +127,6 @@ ARCH.DISCOVERY_DROPOUT = 0.5
 # Auxiliary presence loss in propagation
 ARCH.AUX_PRES_KL = True
 
+# VQ
+ARCH.BG_VQK = 32
+ARCH.FG_VQK = 64
