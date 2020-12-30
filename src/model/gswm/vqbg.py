@@ -42,7 +42,7 @@ class VQBgModule(nn.Module):
         self.enc_fc = nn.Linear(self.embed_size ** 2 * self.enc_out_channels, ARCH.IMG_ENC_DIM)
 
         ###### VQ
-        self.codebook = VQEmbedding(K=512, D=ARCH.IMG_ENC_DIM)
+        self.codebook = VQEmbedding(K=ARCH.BG_VQK, D=ARCH.IMG_ENC_DIM)
         ###### VQ
 
         self.dec_fc = nn.Linear(ARCH.Z_CTX_DIM, self.embed_size ** 2 * 128)
